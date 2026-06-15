@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Parameters: Temperature, Top P, Top K</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --secondary: #ec4899;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --bar-active: linear-gradient(to top, #4f46e5, #818cf8);
+            --bar-inactive: #e2e8f0;
+            --bar-dead: #cbd5e1;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.6;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
+        header {
+            flex-shrink: 0;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        h1 { font-size: 1.8rem; color: var(--primary); margin-bottom: 0.2rem; }
+        .subtitle { color: var(--text-muted); font-size: 0.9rem; }
+        main {
+            flex: 1;
+            overflow: hidden;
+            padding: 1.5rem;
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 1.5rem;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        .playground, .info-section { overflow-y: auto; padding-right: 10px; height: 100%; }
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+            height: fit-content;
+            margin-bottom: 1.5rem;
+        }
+        .card h2 { font-size: 1.25rem; margin-bottom: 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
+        .controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+        .control-group { display: flex; flex-direction: column; gap: 0.5rem; }
+        .label-row { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.85rem; }
+        .value-display { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-family: monospace; color: var(--primary); font-size: 0.8rem; }
+        input[type="range"] { width: 100%; cursor: pointer; accent-color: var(--primary); height: 4px; }
+        .visualizer-container {
+            position: relative; height: 250px; background: #f1f5f9;
+            border-radius: 8px; display: flex; align-items: flex-end;
+            justify-content: space-around; padding: 1rem 1rem 2rem 1rem;
+            margin-bottom: 1rem; margin-top: 1rem;
+        }
+        .bar-wrapper { flex: 1; margin: 0 4px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; position: relative; }
+        .bar { width: 100%; background: var(--bar-active); border-radius: 4px 4px 0 0; transition: height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s; position: relative; min-height: 2px; }
+        .bar.filtered { background: var(--bar-dead); opacity: 0.6; }
+        .bar.selected { background: var(--secondary); box-shadow: 0 0 10px var(--secondary); }
+        .bar-label { position: absolute; bottom: -20px; font-size: 0.75rem; font-weight: 500; color: var(--text-muted); width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bar-percent { position: absolute; top: -20px; font-size: 0.7rem; color: var(--text-muted); }
+        .generate-btn {
+            background: var(--primary); color: white; border: none;
+            padding: 0.75rem 1.5rem; border-radius: 8px; font-size: 1rem;
+            font-weight: 600; cursor: pointer; width: 100%; transition: background 0.2s;
+        }
+        .generate-btn:hover { background: var(--primary-hover); }
+        .output-display { text-align: center; padding: 1rem; font-size: 2rem; font-weight: 700; color: var(--secondary); transition: transform 0.15s; min-height: 4rem; display: flex; align-items: center; justify-content: center; }
+        .info-card { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border); margin-bottom: 1rem; }
+        .info-card h3 { color: var(--primary); margin-bottom: 0.5rem; }
+        .info-card p { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.75rem; }
+        .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🧠 LLM Sampling Parameters</h1>
+        <p class="subtitle">Visualize how Temperature, Top-K, and Top-P affect token selection</p>
+    </header>
+    <main>
+        <div class="playground">
+            <div class="card">
+                <h2>⚙️ Controls</h2>
+                <div class="controls-grid">
+                    <div class="control-group">
+                        <div class="label-row"><span>🌡️ Temperature</span><span class="value-display" id="temp-val">1.0</span></div>
+                        <input type="range" id="temp" min="0.1" max="3.0" step="0.1" value="1.0">
+                        <small style="color:var(--text-muted);font-size:0.75rem">Low = predictable, High = creative</small>
+                    </div>
+                    <div class="control-group">
+                        <div class="label-row"><span>🔢 Top-K</span><span class="value-display" id="topk-val">0</span></div>
+                        <input type="range" id="topk" min="0" max="10" step="1" value="0">
+                        <small style="color:var(--text-muted);font-size:0.75rem">0 = Off. Keep only top K tokens</small>
+                    </div>
+                    <div class="control-group">
+                        <div class="label-row"><span>📊 Top-P</span><span class="value-display" id="topp-val">1.00</span></div>
+                        <input type="range" id="topp" min="0.01" max="1.0" step="0.01" value="1.0">
+                        <small style="color:var(--text-muted);font-size:0.75rem">Nucleus sampling threshold</small>
+                    </div>
+                </div>
+                <div class="visualizer-container" id="visualizer"></div>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-dot" style="background:linear-gradient(to top,#4f46e5,#818cf8)"></div><span>Active Token</span></div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#cbd5e1"></div><span>Filtered Out</span></div>
+                    <div class="legend-item"><div class="legend-dot" style="background:#ec4899"></div><span>Selected</span></div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>🎲 Sample a Token</h2>
+                <button class="generate-btn" id="generate-btn">Generate Next Token</button>
+                <div class="output-display" id="output">—</div>
+            </div>
+        </div>
+        <div class="info-section">
+            <div class="info-card">
+                <h3>🌡️ Temperature</h3>
+                <p>Scales the raw logit scores before softmax. Higher temperature flattens the distribution (more random), lower temperature sharpens it (more deterministic).</p>
+            </div>
+            <div class="info-card">
+                <h3>🔢 Top-K</h3>
+                <p>Keeps only the top K most probable tokens. All others are filtered out and get zero probability. Set to 0 to disable.</p>
+            </div>
+            <div class="info-card">
+                <h3>📊 Top-P (Nucleus Sampling)</h3>
+                <p>Keeps the smallest set of tokens whose cumulative probability exceeds P. Dynamically adjusts the number of candidates based on the distribution shape.</p>
+            </div>
+            <div class="info-card">
+                <h3>📖 How It Works</h3>
+                <p>1. Raw logits are scaled by Temperature and converted to probabilities via Softmax.</p>
+                <p>2. Top-K filters: only the top K tokens remain.</p>
+                <p>3. Top-P filters: tokens are accumulated until their sum exceeds P.</p>
+                <p>4. Remaining probabilities are renormalized to sum to 1.0.</p>
+                <p>5. A token is sampled from this final distribution.</p>
+            </div>
+        </div>
+    </main>
+    <script>
+        const tokens = [
+            { id: 0, word: "cat",    logit: 4.2 },
+            { id: 1, word: "dog",    logit: 3.8 },
+            { id: 2, word: "bird",   logit: 2.5 },
+            { id: 3, word: "fish",   logit: 1.9 },
+            { id: 4, word: "rabbit", logit: 1.2 },
+            { id: 5, word: "turtle", logit: 0.5 },
+            { id: 6, word: "snake",  logit: -0.3 },
+            { id: 7, word: "frog",   logit: -1.1 },
+            { id: 8, word: "parrot", logit: -2.0 },
+            { id: 9, word: "lion",   logit: -3.5 }
+        ];
+
+        const state = { temp: 1.0, topK: 0, topP: 1.0 };
+
+        const els = {
+            temp: document.getElementById('temp'),
+            topk: document.getElementById('topk'),
+            topp: document.getElementById('topp'),
+            tempVal: document.getElementById('temp-val'),
+            topkVal: document.getElementById('topk-val'),
+            toppVal: document.getElementById('topp-val'),
+            visualizer: document.getElementById('visualizer'),
+            generateBtn: document.getElementById('generate-btn'),
+            output: document.getElementById('output')
+        };
+
+        function init() { createBars(); addListeners(); updateSimulation(); }
+
+        function createBars() {
+            els.visualizer.innerHTML = '';
+            tokens.forEach((t, i) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'bar-wrapper';
+                const percent = document.createElement('div');
+                percent.className = 'bar-percent';
+                percent.id = `pct-${i}`;
+                percent.innerText = '0%';
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+                bar.id = `bar-${i}`;
+                bar.style.height = '0%';
+                const label = document.createElement('div');
+                label.className = 'bar-label';
+                label.innerText = t.word;
+                wrapper.appendChild(percent);
+                wrapper.appendChild(bar);
+                wrapper.appendChild(label);
+                els.visualizer.appendChild(wrapper);
+            });
+        }
+
+        function addListeners() {
+            els.temp.addEventListener('input', (e) => { state.temp = parseFloat(e.target.value); els.tempVal.innerText = state.temp.toFixed(1); updateSimulation(); });
+            els.topk.addEventListener('input', (e) => { state.topK = parseInt(e.target.value); els.topkVal.innerText = state.topK === 0 ? "Off" : state.topK; updateSimulation(); });
+            els.topp.addEventListener('input', (e) => { state.topP = parseFloat(e.target.value); els.toppVal.innerText = state.topP.toFixed(2); updateSimulation(); });
+            els.generateBtn.addEventListener('click', generateToken);
+        }
+
+        function updateSimulation() {
+            let scaledProbs = tokens.map(t => { const score = t.logit / state.temp; return { ...t, score }; });
+            const maxScore = Math.max(...scaledProbs.map(p => p.score));
+            const expScores = scaledProbs.map(p => Math.exp(p.score - maxScore));
+            const sumExp = expScores.reduce((a, b) => a + b, 0);
+            let currentProbs = scaledProbs.map((p, i) => ({ id: p.id, word: p.word, prob: expScores[i] / sumExp, originalIndex: i }));
+            currentProbs.sort((a, b) => b.prob - a.prob);
+            let cumulative = 0;
+            const cutoffIndex = currentProbs.findIndex(p => { cumulative += p.prob; return cumulative > state.topP; });
+            const statusMap = new Array(tokens.length).fill(true);
+            currentProbs.forEach((item, index) => {
+                let filtered = false;
+                if (state.topK > 0 && index >= state.topK) filtered = true;
+                if (state.topP < 1.0 && index > cutoffIndex && cutoffIndex !== -1) filtered = true;
+                statusMap[item.originalIndex] = !filtered;
+            });
+            let totalAllowedProb = 0;
+            currentProbs.forEach(item => { if (statusMap[item.originalIndex]) totalAllowedProb += item.prob; });
+            const finalProbs = currentProbs.map(item => ({ ...item, finalProb: statusMap[item.originalIndex] ? (totalAllowedProb > 0 ? item.prob / totalAllowedProb : 0) : 0, isFiltered: !statusMap[item.originalIndex] }));
+            renderBars(finalProbs);
+        }
+
+        function renderBars(probs) {
+            const renderData = new Array(tokens.length);
+            probs.forEach(p => { renderData[p.originalIndex] = p; });
+            renderData.forEach((data, i) => {
+                const bar = document.getElementById(`bar-${i}`);
+                const pct = document.getElementById(`pct-${i}`);
+                bar.style.height = `${Math.max(data.finalProb * 100, 1)}%`;
+                if (data.isFiltered) { bar.classList.add('filtered'); bar.classList.remove('selected'); pct.innerText = 'Cut'; bar.title = 'Filtered'; }
+                else { bar.classList.remove('filtered'); pct.innerText = (data.finalProb * 100).toFixed(1) + '%'; bar.title = `Probability: ${(data.finalProb * 100).toFixed(2)}%`; }
+            });
+        }
+
+        function generateToken() {
+            let scaledProbs = tokens.map(t => Math.exp(t.logit / state.temp));
+            const sumExp = scaledProbs.reduce((a, b) => a + b, 0);
+            let currentProbs = scaledProbs.map((p, i) => ({ id: i, prob: p / sumExp }));
+            currentProbs.sort((a, b) => b.prob - a.prob);
+            if (state.topK > 0) currentProbs = currentProbs.filter((p, i) => i < state.topK);
+            if (state.topP < 1.0) {
+                let cum = 0;
+                const keepIds = new Set();
+                for (let p of currentProbs) { cum += p.prob; keepIds.add(p.id); if (cum > state.topP) break; }
+                currentProbs = currentProbs.filter(p => keepIds.has(p.id));
+            }
+            const total = currentProbs.reduce((a, b) => a + b.prob, 0);
+            const normProbs = currentProbs.map(p => ({ id: p.id, prob: p.prob / total }));
+            let r = Math.random(); let selectedId = normProbs[0]?.id ?? 0; let sumSoFar = 0;
+            for (let p of normProbs) { sumSoFar += p.prob; if (r <= sumSoFar) { selectedId = p.id; break; } }
+            document.querySelectorAll('.bar').forEach(b => b.classList.remove('selected'));
+            const selectedBar = document.getElementById(`bar-${selectedId}`);
+            if (selectedBar) selectedBar.classList.add('selected');
+            els.output.innerText = `"${tokens[selectedId].word}"`;
+            els.output.style.transform = "scale(1.2)";
+            setTimeout(() => els.output.style.transform = "scale(1)", 150);
+        }
+
+        init();
+    </script>
+</body>
+</html>
